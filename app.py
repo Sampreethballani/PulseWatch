@@ -81,8 +81,8 @@ def _validate_production_config(app: Flask) -> None:
         )
     if not app.config.get("DATABASE_PATH_EXPLICIT"):
         raise RuntimeError(
-            "DATABASE_PATH must be set in production (for Render: /var/data/monitor.db). "
-            "This prevents monitoring history from silently living on an ephemeral disk."
+            "DATABASE_PATH must be set in production (Render free: data/monitor.db; "
+            "with a persistent disk: /var/data/monitor.db)."
         )
 
 

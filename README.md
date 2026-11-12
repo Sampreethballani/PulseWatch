@@ -472,83 +472,89 @@ not set explicitly. It never silently falls back to an ephemeral database.
 
 ---
 
-## 13. Production deployment on Render
+## 13. Production deployment on Render (free tier)
 
-Render runs this repository as a Python web service with HTTPS, a health check and
-an optional persistent disk. The included `render.yaml` is a Blueprint that encodes
-the whole setup.
+This project is configured for Render's **free web service**: no card details, no
+paid instance, no persistent disk. The included `render.yaml` is a Blueprint that
+encodes the whole setup.
 
-### 13.1 What Render runs
+### 13.1 What Render runs (free)
 
 | Setting | Value |
 | --- | --- |
 | Runtime | Python (`PYTHON_VERSION=3.12.6`) |
+| Plan | **`free`** — no payment method required |
 | Build command | `pip install -r requirements.txt` |
 | Start command | `gunicorn --workers 1 --threads 4 --bind 0.0.0.0:$PORT app:app` |
 | Health check | `/healthz` |
-| Workers | **1** (the scheduler must not be duplicated) |
-| Disk | 1 GB mounted at `/var/data` |
-| Plan | `starter` — Render only offers disks on paid instance types |
+| Workers | **1** (the in-process scheduler must not be duplicated) |
+| Disk | **none** |
+| `DATABASE_PATH` | `data/monitor.db` (relative to the repository root) |
+| `PULSEWATCH_REQUIRE_PERSISTENT_DB` | **not set** (that guard is for paid disks) |
 
-### 13.2 Why a paid instance and a disk
+Relative `DATABASE_PATH` values are resolved against the application directory in
+`config.py`, not the process working directory, so the path is correct no matter
+where Gunicorn is started. The `data/` directory is created automatically and must
+be writable, which it is on Render's free instances.
 
-Render's free web services have an ephemeral filesystem and spin down after
-inactivity. SQLite lives on local disk, so without a disk every deploy, restart or
-wake-up would lose the monitoring history. The Blueprint therefore uses a Starter
-instance and mounts `/var/data`; `DATABASE_PATH=/var/data/monitor.db` and
-`PULSEWATCH_REQUIRE_PERSISTENT_DB=1` make the app refuse an ephemeral location
-instead of silently starting with one. SQLite also requires a single writer, so do
-not scale this service to multiple instances.
+### 13.2 What "free" means for your data
 
-While a sleeping instance is down, the in-process scheduler cannot run; checks
-resume on the next request that wakes it. Use an always-on instance type if
-uninterrupted 24/7 probing is required.
+* **SQLite history is temporary.** Render's free services use an ephemeral
+  filesystem. Websites, check results and incidents live only for the lifetime of
+  that instance and are lost when Render restarts it, redeploys the service, or
+  spins it down. `/healthz` reports `"persistent": false` to make this explicit.
+* **Monitoring pauses when the service sleeps.** Free services spin down after a
+  period of inactivity (Render currently uses roughly 15 minutes). While asleep the
+  scheduler cannot run, so no checks are recorded; the next request wakes the
+  service and monitoring resumes from the next cycle.
+* **No card is required.** The free plan, the Blueprint above and the commands in
+  this section need no billing details.
+* Everything else is unchanged: real HTTP/DNS/TLS probes, SSRF and DNS-rebinding
+  protection, admin login, rate limiting, CSV export, incidents, analytics and the
+  responsive light/dark UI. The scheduler still starts exactly once because the
+  start command pins Gunicorn to one worker (`WEB_CONCURRENCY=1`, `--workers 1`).
+
+If you later need permanent history, upgrade the service to Starter, attach a 1 GB
+disk at `/var/data`, set `DATABASE_PATH=/var/data/monitor.db` and
+`PULSEWATCH_REQUIRE_PERSISTENT_DB=1`. No code changes are required.
 
 ### 13.3 Publish the code to GitHub
 
-Create an **empty** repository on GitHub (no README, no `.gitignore`), then from
-PowerShell in the project folder:
-
 ```powershell
 cd D:\sampreeth\website-monitor
-git init
 git add .
-git commit -m "Production-ready PulseWatch: env config, auth, SSRF pinning, Render deployment"
-git branch -M main
-git remote add origin https://github.com/<your-github-user>/pulsewatch.git
-git push -u origin main
+git commit -m "Configure PulseWatch for Render's free tier"
+git push
 ```
 
-`.gitignore` already excludes `.venv/`, `data/`, `*.db`, `.env`, logs and caches.
-Before pushing, confirm no data or secrets are staged:
-
-```powershell
-git status --short
-git ls-files | Select-String -Pattern "\.db$|\.env$|monitor\.db"
-```
-
-The second command should print nothing. If `data/monitor.db` slips in, run
-`git rm --cached -r data` and commit again; never commit the database.
+The repository for this project is public at
+<https://github.com/Sampreethballani/PulseWatch>. `.gitignore` excludes `.venv/`,
+`data/`, `*.db`, `.env`, logs and caches, so no monitoring data or secrets are
+committed. If you fork or copy the project, create an empty repository on GitHub
+and push with `git remote add origin <url>`.
 
 ### 13.4 Create the Render service
 
-1. Sign in to <https://render.com> with the same GitHub account.
-2. **New +** → **Blueprint**, select the repository. Render reads `render.yaml`.
-3. On the review screen set **`ADMIN_TOKEN`** to a long random value (Render stores
-   it as a secret; `SECRET_KEY` is generated automatically). Keep the Starter plan
-   and the 1 GB disk.
-4. **Apply** / **Deploy**. The first build installs `requirements.txt`; the start
-   command launches Gunicorn.
-5. Watch the logs for `Database ready at /var/data/monitor.db`, one
-   `Monitoring scheduler started`, and Gunicorn's listening line. The health check
-   turns the deploy green.
-6. Open the public URL Render shows, e.g. `https://pulsewatch-xxxx.onrender.com`.
+1. Sign in to <https://render.com> (GitHub, Google or email).
+2. **New +** → **Blueprint** → select the repository. Render reads `render.yaml`
+   and shows a **Free** instance with no disk.
+3. Set **`ADMIN_TOKEN`** to a long random value. Leave `SECRET_KEY` as *Generate*.
+4. Confirm the plan is **Free** and click **Apply** / **Deploy**.
+5. Watch the build logs for `pip install`, `Database ready at .../data/monitor.db`,
+   exactly one `Monitoring scheduler started`, and Gunicorn listening on `$PORT`.
+   The health check turns the deploy green.
+6. Open the public URL, e.g. `https://pulsewatch-xxxx.onrender.com`.
 7. Go to `/admin/login`, enter `ADMIN_TOKEN`, then use **Load samples** or add your
-   own sites. The first cycle runs within ~30 seconds and history starts filling.
+   own sites. The first cycle runs within ~30 seconds.
 
-If you prefer a manual service instead of the Blueprint: create a **Web Service**,
-choose Python, set the build and start commands above, add the environment
-variables from section 11, and add a disk with mount path `/var/data`.
+Manual alternative: **New +** → **Web Service** → connect the repo → Runtime
+Python, Build `pip install -r requirements.txt`, Start
+`gunicorn --workers 1 --threads 4 --bind 0.0.0.0:$PORT app:app`, Plan **Free**, no
+disk, health check `/healthz`, and environment variables `DATABASE_PATH=data/monitor.db`,
+`SECRET_KEY` (generate), `ADMIN_TOKEN`, `WEB_CONCURRENCY=1`.
+
+Do **not** add `PULSEWATCH_REQUIRE_PERSISTENT_DB` on the free plan: it deliberately
+refuses to start when the database is not on a persistent disk.
 
 ### 13.5 Verify the deployment
 
@@ -557,30 +563,37 @@ curl https://<service>.onrender.com/healthz
 curl -I https://<service>.onrender.com/
 ```
 
-* `/healthz` → `{"status":"ok","database":{"ok":true,...},"scheduler":{"running":true,...}}`
-  with `"persistent":true` when the disk is mounted.
+* `/healthz` → `{"status":"ok","database":{"ok":true,"persistent":false,...},"scheduler":{"running":true,...}}`.
+  `"persistent": false` is expected and correct on the free tier.
 * The HTTPS response includes `Strict-Transport-Security`.
-* The dashboard shows real per-site latency, HTTP codes and rising check counts.
-* Sign in at `/admin/login` and confirm adding, checking and deleting a site works;
-  a signed-out visitor should get read-only pages and `403` for mutations.
+* The dashboard lists your sites, checks rise every 30 seconds, and CSV/DNS/TLS
+  panels return real data.
+* Sign in at `/admin/login`; a signed-out visitor gets read-only pages and `403`
+  for mutations.
 
-### 13.6 Troubleshooting
+After a restart or a wake-up, the site may show **N/A** uptime and no history until
+new checks are recorded — that confirms the ephemeral storage behaviour described
+in 13.2, not a bug.
+
+### 13.6 Troubleshooting (free tier)
 
 | Symptom | Cause / fix |
 | --- | --- |
-| Deploy fails with `SECRET_KEY must be set...` | Add a strong `SECRET_KEY` (the Blueprint generates one). |
-| `DATABASE_PATH must be set explicitly in production` | Set `DATABASE_PATH=/var/data/monitor.db`. |
-| `DATABASE_PATH ... is outside the persistent directory` | Disk not mounted at `/var/data`, or `PULSEWATCH_PERSISTENT_DB_DIR` mismatched. |
-| History disappears after a deploy | No disk attached (free instance); attach one and redeploy. |
+| Deploy fails with `SECRET_KEY must be set...` | Set a strong `SECRET_KEY` (the Blueprint generates one). |
+| `DATABASE_PATH must be set in production` | Set `DATABASE_PATH=data/monitor.db`. |
+| `... is outside the persistent directory` | You set `PULSEWATCH_REQUIRE_PERSISTENT_DB` on a free service; remove it. |
+| History or sites vanish after a while | Expected on free: ephemeral filesystem plus spin-down. Use Starter + disk for persistence. |
+| Site takes ~30–60 s to respond after idle | Free instance waking from sleep; the first request is the cold start. |
+| No checks while idle | Scheduler pauses when the free instance sleeps; it resumes on wake. |
 | `403` when adding a site | Sign in at `/admin/login`, or set `ADMIN_TOKEN`. |
 | `429 Too Many Requests` | Per-IP rate limit; wait a minute or raise `RATE_LIMIT_*`. |
-| No new checks / `scheduler.running=false` | `PULSEWATCH_DISABLE_SCHEDULER` set, or the instance is asleep. |
 | Build cannot find `app:app` | Start command must reference `app:app` from the repository root. |
 | Gunicorn fails locally on Windows | Expected: Gunicorn is Unix-only. Use Waitress locally; Render runs Linux. |
 
 ---
 
 ## 14. Usage guide
+
 
 
 1. **Add a website** — *Add website* on the dashboard or websites page; `example.com`

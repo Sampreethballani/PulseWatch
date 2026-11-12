@@ -45,7 +45,11 @@ def _env_str(*names: str, default: str = "") -> str:
 def _database_path() -> str:
     raw = _env_str("DATABASE_PATH", "MONITOR_DB_PATH")
     if raw:
-        return str(Path(raw).expanduser().resolve())
+        path = Path(raw).expanduser()
+        if not path.is_absolute():
+            # Relative paths belong to the app, not the process working directory.
+            path = BASE_DIR / path
+        return str(path.resolve())
     return str((DEFAULT_DATA_DIR / "monitor.db").resolve())
 
 

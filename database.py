@@ -83,9 +83,9 @@ def ensure_database_ready(
 
     if production and not config.Config.DATABASE_PATH_EXPLICIT:
         raise RuntimeError(
-            "DATABASE_PATH is not set. In production, configure DATABASE_PATH to the "
-            "persistent disk location (for example /var/data/monitor.db) before starting "
-            "the application, so monitoring history survives restarts."
+            "DATABASE_PATH is not set. In production, configure DATABASE_PATH explicitly "
+            "(Render free: data/monitor.db; persistent disk: /var/data/monitor.db) before "
+            "starting the application."
         )
 
     parent = path.parent
