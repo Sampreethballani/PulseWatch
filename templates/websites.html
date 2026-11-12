@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_pill, latency, code_badge, uptime_value, site_icon, empty_state %}
+
+{% block title %}Websites{% endblock %}
+{% block page %}websites{% endblock %}
+{% block breadcrumb %}Websites{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Websites</h1>
+    <p class="page-sub">Manage every monitored endpoint, its URL and monitoring history.</p>
+  </div>
+  <div class="page-actions">
+    {% if can_manage %}
+    <form method="post" action="{{ url_for('add_sample_websites') }}">
+      <button class="btn btn-outline-secondary" type="submit">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> Load samples
+      </button>
+    </form>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('export_csv', hours=720) }}">
+      <i class="fa-solid fa-file-csv"></i> Export 30 days
+    </a>
+    {% if can_manage %}
+    <button class="btn btn-primary" type="button" data-add-site>
+      <i class="fa-solid fa-plus"></i> Add website
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<section class="panel">
+  <div class="panel-header panel-header--wrap">
+    <div>
+      <h2 class="panel-title">All monitors</h2>
+      <p class="panel-sub">{{ sites|length }} website{{ '' if sites|length == 1 else 's' }} · status refreshes with every cycle</p>
+    </div>
+    <div class="table-tools">
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="search" id="siteSearch" placeholder="Search name or URL…" aria-label="Search websites" autocomplete="off">
+      </div>
+      <select id="siteStatusFilter" class="form-select form-select-sm" aria-label="Filter by status">
+        <option value="all">All statuses</option>
+        <option value="UP">Up</option>
+        <option value="DEGRADED">Degraded</option>
+        <option value="DOWN">Down</option>
+        <option value="UNKNOWN">Unknown</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-monitor align-middle">
+      <thead>
+        <tr>
+          <th scope="col">Website</th>
+          <th scope="col">Status</th>
+          <th scope="col" class="d-none d-lg-table-cell">Uptime 24h</th>
+          <th scope="col" class="d-none d-xl-table-cell">Uptime 7d</th>
+          <th scope="col" class="d-none d-md-table-cell">Response</th>
+          <th scope="col" class="d-none d-lg-table-cell">Added</th>
+          <th scope="col">Last checked</th>
+          <th scope="col" class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="siteTableBody">
+        {% for site in sites %}
+          <tr data-site-row data-site-id="{{ site.id }}" data-status="{{ site.status }}"
+              data-search="{{ site.name|lower }} {{ site.url|lower }}">
+            <td>
+              <div class="site-cell">
+                {{ site_icon(site.name) }}
+                <div class="site-meta">
+                  <a href="{{ url_for('website_details', website_id=site.id) }}" class="site-name">{{ site.name }}</a>
+                  <a class="site-url" href="{{ site.url }}" target="_blank" rel="noopener noreferrer">{{ site.url }}</a>
+                </div>
+              </div>
+            </td>
+            <td>{{ status_pill(site.status) }}</td>
+            <td class="d-none d-lg-table-cell">{{ uptime_value(site.uptime_24h) }}</td>
+            <td class="d-none d-xl-table-cell">{{ uptime_value(site.uptime_7d) }}</td>
+            <td class="d-none d-md-table-cell">{{ latency(site.response_time_ms, site.performance_class) }}</td>
+            <td class="d-none d-lg-table-cell cell-time">
+              <time datetime="{{ site.created_at }}" data-utc="{{ site.created_at }}">{{ site.created_at|utc_dt }}</time>
+            </td>
+            <td class="cell-time">
+              {% if site.checked_at %}
+                <time datetime="{{ site.checked_at }}" data-utc="{{ site.checked_at }}">{{ site.checked_at|utc_dt }}</time>
+              {% else %}
+                <span class="text-muted">Never</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="table-actions">
+                <a class="btn-icon" href="{{ url_for('website_details', website_id=site.id) }}" title="View details">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                </a>
+                {% if can_manage %}
+                <button class="btn-icon" type="button" title="Edit"
+                        data-edit-site data-site-id="{{ site.id }}"
+                        data-site-name="{{ site.name }}" data-site-url="{{ site.url }}">
+                  <i class="fa-solid fa-pen"></i>
+                </button>
+                <button class="btn-icon" type="button" title="Check now"
+                        data-post="{{ url_for('check_one', website_id=site.id) }}">
+                  <i class="fa-solid fa-bolt"></i>
+                </button>
+                <form method="post" action="{{ url_for('delete_website', website_id=site.id) }}"
+                      data-confirm="Delete {{ site.name }}? All monitoring history and incidents for this website will be removed.">
+                  <button class="btn-icon danger" type="submit" title="Delete">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        {% if not sites %}
+          <tr class="empty-row">
+            <td colspan="8">
+              {{ empty_state('fa-globe', 'No websites yet', 'Add a URL manually or load the sample set (Google, GitHub, Wikipedia, Python.org, Microsoft) to see live monitoring data.') }}
+              {% if can_manage %}
+              <div class="empty-actions">
+                <button class="btn btn-primary btn-sm" type="button" data-add-site>
+                  <i class="fa-solid fa-plus"></i> Add website
+                </button>
+                <form method="post" action="{{ url_for('add_sample_websites') }}">
+                  <button class="btn btn-outline-secondary btn-sm" type="submit">Load sample websites</button>
+                </form>
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel-footer">
+    <span class="text-muted small">
+      <i class="fa-solid fa-shield-halved"></i>
+      Private, loopback, link-local and reserved addresses are blocked before every request — including redirects.
+    </span>
+  </div>
+</section>
+
+<section class="panel mt-3">
+  <div class="panel-header">
+    <h2 class="panel-title">Latency classification</h2>
+    <span class="panel-sub">Configurable in Settings</span>
+  </div>
+  <div class="panel-body">
+    <div class="threshold-row">
+      <div class="threshold threshold-fast">
+        <span class="status-dot"></span>
+        <div><strong>Fast</strong><span>below {{ settings.fast_threshold }} ms</span></div>
+      </div>
+      <div class="threshold threshold-moderate">
+        <span class="status-dot"></span>
+        <div><strong>Moderate</strong><span>{{ settings.fast_threshold }}–{{ settings.moderate_threshold }} ms</span></div>
+      </div>
+      <div class="threshold threshold-slow">
+        <span class="status-dot"></span>
+        <div><strong>Slow</strong><span>above {{ settings.moderate_threshold }} ms → DEGRADED</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

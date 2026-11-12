@@ -1,0 +1,43 @@
+{% macro status_pill(status) -%}
+  {% set value = (status or 'UNKNOWN')|upper %}
+  <span class="status-pill status-{{ value|lower }}">
+    <span class="status-dot"></span>{{ value }}
+  </span>
+{%- endmacro %}
+
+{% macro latency(ms, klass) -%}
+  {% if ms is not none %}
+    <span class="latency latency-{{ klass or 'unknown' }}">{{ ms|round(0)|int }}<small>ms</small></span>
+  {% else %}
+    <span class="text-muted">—</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro code_badge(code) -%}
+  {% if code %}
+    {% set tone = 'ok' if code < 300 else ('warn' if code < 500 else 'bad') %}
+    <span class="code-badge code-{{ tone }}">{{ code }}</span>
+  {% else %}
+    <span class="text-muted">—</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro uptime_value(value) -%}
+  {% if value is not none %}
+    <span class="uptime-value {{ 'is-good' if value >= 99 else ('is-warn' if value >= 95 else 'is-bad') }}">{{ '%.2f'|format(value) }}%</span>
+  {% else %}
+    <span class="text-muted">N/A</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro site_icon(name) -%}
+  <span class="site-avatar" aria-hidden="true">{{ (name or '?')[0]|upper }}</span>
+{%- endmacro %}
+
+{% macro empty_state(icon, title, text) -%}
+  <div class="empty-state">
+    <span class="empty-icon"><i class="fa-solid {{ icon }}"></i></span>
+    <h3>{{ title }}</h3>
+    <p>{{ text }}</p>
+  </div>
+{%- endmacro %}

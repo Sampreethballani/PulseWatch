@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+
+{% block title %}Administrator sign-in{% endblock %}
+{% block page %}admin{% endblock %}
+{% block breadcrumb %}Administrator{% endblock %}
+
+{% block content %}
+<section class="panel login-card">
+  <div class="panel-body">
+    <span class="login-icon"><i class="fa-solid fa-user-shield"></i></span>
+    <h1>Administrator sign-in</h1>
+    <p class="page-sub mb-4">
+      The dashboard is public and read-only. Managing monitored websites requires the
+      access token configured on this server.
+    </p>
+
+    <form method="post" action="{{ url_for('admin_login') }}">
+      <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+      <div class="mb-3">
+        <label class="form-label" for="adminToken">Access token</label>
+        <input class="form-control" type="password" id="adminToken" name="token"
+               autocomplete="current-password" required autofocus placeholder="ADMIN_TOKEN">
+      </div>
+      <button class="btn btn-primary w-100" type="submit">
+        <i class="fa-solid fa-arrow-right-to-bracket"></i> Sign in
+      </button>
+    </form>
+
+    <p class="login-note mt-3 mb-0">
+      <i class="fa-solid fa-circle-info"></i>
+      The token is never stored in the browser bundle; only a signed session cookie is issued.
+    </p>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_pill, latency, code_badge, uptime_value, site_icon, empty_state %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page %}dashboard{% endblock %}
+{% block breadcrumb %}Dashboard{% endblock %}
+
+{% block content %}
+{% set summary = snapshot.summary %}
+<div class="page-head">
+  <div>
+    <h1>Monitoring overview</h1>
+    <p class="page-sub">Real-time availability, latency and incidents across every watched website.</p>
+  </div>
+  <div class="page-actions">
+    {% if can_manage %}
+    <button class="btn btn-outline-secondary" type="button" data-add-site>
+      <i class="fa-solid fa-plus"></i> Add website
+    </button>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('export_csv', hours=24) }}">
+      <i class="fa-solid fa-file-csv"></i> Export CSV
+    </a>
+    {% if can_manage %}
+    <form method="post" action="{{ url_for('check_now') }}">
+      <input type="hidden" name="next" value="{{ url_for('dashboard') }}">
+      <button class="btn btn-primary" type="submit" data-check-all>
+        <i class="fa-solid fa-bolt"></i> Check all now
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="row g-3 stat-grid">
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-indigo"><i class="fa-solid fa-globe"></i></span>
+        <span class="stat-label">Websites</span>
+      </div>
+      <div class="stat-value" data-summary="total">{{ summary.total }}</div>
+      <div class="stat-hint">Registered monitors</div>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-green"><i class="fa-solid fa-circle-check"></i></span>
+        <span class="stat-label">Up</span>
+      </div>
+      <div class="stat-value" data-summary="up">{{ summary.up }}</div>
+      <div class="stat-hint">Responding normally</div>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-red"><i class="fa-solid fa-circle-xmark"></i></span>
+        <span class="stat-label">Down</span>
+      </div>
+      <div class="stat-value" data-summary="down">{{ summary.down }}</div>
+      <div class="stat-hint">Unreachable</div>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-amber"><i class="fa-solid fa-triangle-exclamation"></i></span>
+        <span class="stat-label">Degraded</span>
+      </div>
+      <div class="stat-value" data-summary="degraded">{{ summary.degraded }}</div>
+      <div class="stat-hint">Errors or slow</div>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-sky"><i class="fa-solid fa-stopwatch"></i></span>
+        <span class="stat-label">Avg response</span>
+      </div>
+      <div class="stat-value" data-summary="avg_response">
+        {% if summary.avg_response_ms is not none %}{{ summary.avg_response_ms|round(0)|int }}<small>ms</small>{% else %}—{% endif %}
+      </div>
+      <div class="stat-hint">Successful checks · 24h</div>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-violet"><i class="fa-solid fa-arrow-trend-up"></i></span>
+        <span class="stat-label">Uptime</span>
+      </div>
+      <div class="stat-value" data-summary="uptime_24h">
+        {% if summary.uptime_24h is not none %}{{ '%.2f'|format(summary.uptime_24h) }}<small>%</small>{% else %}<span class="text-muted">N/A</span>{% endif %}
+      </div>
+      <div class="stat-hint">All websites · 24h</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-xxl-8">
+    <section class="panel h-100">
+      <div class="panel-header panel-header--wrap">
+        <div>
+          <h2 class="panel-title">Monitored websites</h2>
+          <p class="panel-sub" id="dashTableCount">{{ snapshot.sites|length }} website{{ '' if snapshot.sites|length == 1 else 's' }}</p>
+        </div>
+        <div class="table-tools">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="search" id="dashSearch" placeholder="Search websites…" aria-label="Search websites" autocomplete="off">
+          </div>
+          <select id="dashStatusFilter" class="form-select form-select-sm" aria-label="Filter by status">
+            <option value="all">All statuses</option>
+            <option value="UP">Up</option>
+            <option value="DEGRADED">Degraded</option>
+            <option value="DOWN">Down</option>
+            <option value="UNKNOWN">Unknown</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-monitor align-middle">
+          <thead>
+            <tr>
+              <th scope="col">Website</th>
+              <th scope="col">Status</th>
+              <th scope="col">HTTP</th>
+              <th scope="col">Response</th>
+              <th scope="col" class="d-none d-xl-table-cell">Uptime 24h</th>
+              <th scope="col">Last checked</th>
+              <th scope="col" class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="dashTableBody">
+            {% for site in snapshot.sites %}
+              <tr data-site-row data-site-id="{{ site.id }}" data-status="{{ site.status }}"
+                  data-search="{{ site.name|lower }} {{ site.url|lower }}">
+                <td>
+                  <div class="site-cell">
+                    {{ site_icon(site.name) }}
+                    <div class="site-meta">
+                      <a href="{{ url_for('website_details', website_id=site.id) }}" class="site-name">{{ site.name }}</a>
+                      <span class="site-url">{{ site.hostname }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>{{ status_pill(site.status) }}</td>
+                <td>{{ code_badge(site.http_status_code) }}</td>
+                <td>{{ latency(site.response_time_ms, site.performance_class) }}</td>
+                <td class="d-none d-xl-table-cell">{{ uptime_value(site.uptime_24h) }}</td>
+                <td class="cell-time">
+                  {% if site.checked_at %}
+                    <time datetime="{{ site.checked_at }}" data-utc="{{ site.checked_at }}">{{ site.checked_at|utc_dt }}</time>
+                  {% else %}
+                    <span class="text-muted">Never</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="table-actions">
+                    <a class="btn-icon" href="{{ url_for('website_details', website_id=site.id) }}" title="View details">
+                      <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                    </a>
+                    {% if can_manage %}
+                    <button class="btn-icon" type="button" title="Edit"
+                            data-edit-site data-site-id="{{ site.id }}"
+                            data-site-name="{{ site.name }}" data-site-url="{{ site.url }}">
+                      <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button class="btn-icon" type="button" title="Check now"
+                            data-post="{{ url_for('check_one', website_id=site.id) }}">
+                      <i class="fa-solid fa-bolt"></i>
+                    </button>
+                    <form method="post" action="{{ url_for('delete_website', website_id=site.id) }}"
+                          data-confirm="Delete {{ site.name }}? All monitoring history and incidents for this website will be removed.">
+                      <button class="btn-icon danger" type="submit" title="Delete">
+                        <i class="fa-solid fa-trash-can"></i>
+                      </button>
+                    </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+            {% if not snapshot.sites %}
+              <tr class="empty-row">
+                <td colspan="7">
+                  {{ empty_state('fa-satellite-dish', 'No websites monitored yet', 'Add your first URL to start collecting availability, latency, DNS and TLS data.') }}
+                  {% if can_manage %}
+                  <div class="empty-actions">
+                    <button class="btn btn-primary btn-sm" type="button" data-add-site>
+                      <i class="fa-solid fa-plus"></i> Add website
+                    </button>
+                    <form method="post" action="{{ url_for('add_sample_websites') }}">
+                      <button class="btn btn-outline-secondary btn-sm" type="submit">Load sample websites</button>
+                    </form>
+                  </div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+      <div class="panel-footer">
+        <span class="text-muted small">A check is successful when the final status is UP (HTTP &lt; 400 and within the latency threshold).</span>
+        <button class="btn btn-link btn-sm" type="button" id="dashRefresh">
+          <i class="fa-solid fa-rotate"></i> Refresh data
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xxl-4">
+    <div class="side-stack">
+      <section class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Monitor engine</h2>
+          <span class="chip chip-soft" data-engine-state>Auto</span>
+        </div>
+        <div class="panel-body">
+          <div class="kv-list">
+            <div class="kv"><span>Last cycle</span><strong data-engine="last">—</strong></div>
+            <div class="kv"><span>Next check</span><strong data-engine="next">—</strong></div>
+            <div class="kv"><span>Interval</span><strong>{{ snapshot.monitor.interval }}s</strong></div>
+            <div class="kv"><span>Timeout</span><strong>{{ snapshot.monitor.timeout }}s</strong></div>
+            <div class="kv"><span>Fast / moderate</span><strong>{{ snapshot.monitor.fast_threshold }} / {{ snapshot.monitor.moderate_threshold }} ms</strong></div>
+          </div>
+          <div class="engine-progress" aria-hidden="true"><span data-engine-bar></span></div>
+          <p class="small text-muted mb-0 mt-2">
+            The worker runs independently of this page, so closing the tab does not stop monitoring.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2 class="panel-title">Recent incidents</h2>
+          <a class="panel-link" href="{{ url_for('incidents_page') }}">View all</a>
+        </div>
+        <div class="panel-body pt-0" id="recentIncidentList">
+          {% for incident in snapshot.recent_incidents %}
+            <div class="incident-item">
+              <span class="incident-icon {{ 'is-open' if incident.incident_status == 'OPEN' else 'is-closed' }}">
+                <i class="fa-solid {{ 'fa-triangle-exclamation' if incident.incident_status == 'OPEN' else 'fa-circle-check' }}"></i>
+              </span>
+              <div class="incident-body">
+                <div class="incident-title">
+                  <a href="{{ url_for('website_details', website_id=incident.website_id) }}">{{ incident.website_name }}</a>
+                  <span class="chip chip-xs {{ 'chip-danger' if incident.incident_status == 'OPEN' else 'chip-muted' }}">{{ incident.incident_status }}</span>
+                </div>
+                <p class="incident-desc">{{ incident.description or 'Availability incident' }}</p>
+                <span class="incident-time">
+                  <time datetime="{{ incident.started_at }}" data-utc="{{ incident.started_at }}">{{ incident.started_at|utc_dt }}</time>
+                  {% if incident.duration_seconds is not none %} · {{ incident.duration_seconds|duration }}{% endif %}
+                </span>
+              </div>
+            </div>
+          {% endfor %}
+          {% if not snapshot.recent_incidents %}
+            <div class="empty-inline">
+              <i class="fa-solid fa-shield-heart"></i>
+              <p>No incidents recorded. Healthy so far.</p>
+            </div>
+          {% endif %}
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+{% endblock %}

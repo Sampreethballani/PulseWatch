@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_pill, latency, code_badge, uptime_value, site_icon, empty_state %}
+
+{% block title %}{{ site.name }}{% endblock %}
+{% block page %}details{% endblock %}
+{% block breadcrumb %}Website details{% endblock %}
+{% block body_attrs %}data-website-id="{{ site.id }}" data-hours="{{ hours }}"{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <a class="back-link" href="{{ url_for('websites_page') }}"><i class="fa-solid fa-arrow-left"></i> All websites</a>
+    <div class="detail-title">
+      {{ site_icon(site.name) }}
+      <div>
+        <h1>{{ site.name }}</h1>
+        <a class="detail-url" href="{{ site.url }}" target="_blank" rel="noopener noreferrer">
+          {{ site.url }} <i class="fa-solid fa-arrow-up-right-from-square"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+  <div class="page-actions">
+    {% if can_manage %}
+    <button class="btn btn-outline-secondary" type="button" data-post="{{ url_for('check_one', website_id=site.id) }}">
+      <i class="fa-solid fa-bolt"></i> Check now
+    </button>
+    <button class="btn btn-outline-secondary" type="button"
+            data-edit-site data-site-id="{{ site.id }}" data-site-name="{{ site.name }}" data-site-url="{{ site.url }}">
+      <i class="fa-solid fa-pen"></i> Edit
+    </button>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('export_csv', website_id=site.id, hours=hours) }}">
+      <i class="fa-solid fa-file-csv"></i> Export CSV
+    </a>
+    {% if can_manage %}
+    <form method="post" action="{{ url_for('delete_website', website_id=site.id) }}"
+          data-confirm="Delete {{ site.name }}? All monitoring history and incidents for this website will be removed.">
+      <button class="btn btn-outline-danger" type="submit"><i class="fa-solid fa-trash-can"></i></button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<section class="panel status-hero">
+  <div class="status-hero-main">
+    <div class="status-hero-state">
+      {{ status_pill(site.status) }}
+      <span class="status-hero-text">
+        {% if site.status == 'UP' %}
+          Responding normally{% if site.response_time_ms is not none %} in {{ site.response_time_ms|round(0)|int }} ms{% endif %}.
+        {% elif site.status == 'DEGRADED' %}
+          {{ site.error_message or 'Responding with errors or above the latency threshold.' }}
+        {% elif site.status == 'DOWN' %}
+          {{ site.error_message or 'The website could not be reached.' }}
+        {% else %}
+          Waiting for the first monitoring result.
+        {% endif %}
+      </span>
+    </div>
+    <div class="status-hero-facts">
+      <div><span>HTTP status</span>{{ code_badge(site.http_status_code) }}</div>
+      <div><span>Latency class</span>
+        <span class="chip chip-xs chip-{{ 'success' if site.performance_class == 'fast' else ('warning' if site.performance_class == 'moderate' else ('danger' if site.performance_class == 'slow' else 'muted')) }}">
+          {{ site.performance_class|capitalize }}
+        </span>
+      </div>
+      <div><span>Resolved IP</span><strong>{{ site.resolved_ip or '—' }}</strong></div>
+      <div><span>Last checked</span>
+        <strong>{% if site.checked_at %}<time datetime="{{ site.checked_at }}" data-utc="{{ site.checked_at }}">{{ site.checked_at|utc_dt }}</time>{% else %}Never{% endif %}</strong>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="row g-3 mt-1">
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="mini-stat">
+      <span class="mini-label">Uptime · 24h</span>
+      <span class="mini-value">{{ uptime_value(site.uptime_24h) }}</span>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="mini-stat">
+      <span class="mini-label">Uptime · 7d</span>
+      <span class="mini-value">{{ uptime_value(site.uptime_7d) }}</span>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="mini-stat">
+      <span class="mini-label">Uptime · 30d</span>
+      <span class="mini-value">{{ uptime_value(site.uptime_30d) }}</span>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="mini-stat">
+      <span class="mini-label">Avg response · 24h</span>
+      <span class="mini-value">{{ latency(site.avg_response_24h, site.performance_class) }}</span>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="mini-stat">
+      <span class="mini-label">Checks stored</span>
+      <span class="mini-value">{{ site.total_checks }}</span>
+    </div>
+  </div>
+  <div class="col-xl-2 col-md-4 col-6">
+    <div class="mini-stat">
+      <span class="mini-label">Incidents</span>
+      <span class="mini-value">{{ site.incident_count }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-xl-8">
+    <section class="panel h-100">
+      <div class="panel-header panel-header--wrap">
+        <div>
+          <h2 class="panel-title">Response time</h2>
+          <p class="panel-sub">Successful checks in milliseconds · {{ '24 hours' if hours == 24 else ('7 days' if hours == 168 else '30 days') }}</p>
+        </div>
+        <div class="segmented">
+          {% for value, label in [(24, '24h'), (168, '7d'), (720, '30d')] %}
+            <a class="{{ 'is-active' if hours == value }}" href="{{ url_for('website_details', website_id=site.id, hours=value) }}">{{ label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="chart-box">
+          <canvas id="responseChart" aria-label="Response time history chart" role="img"></canvas>
+          <div class="chart-empty" id="responseChartEmpty" hidden>
+            <i class="fa-solid fa-chart-line"></i>
+            <p>No successful checks in this period yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xl-4">
+    <section class="panel h-100">
+      <div class="panel-header">
+        <h2 class="panel-title">DNS &amp; TLS</h2>
+        <button class="btn btn-sm btn-outline-secondary" type="button" id="refreshNetwork">
+          <i class="fa-solid fa-rotate"></i> Refresh
+        </button>
+      </div>
+      <div class="panel-body">
+        <div class="network-block">
+          <div class="network-block-head">
+            <span><i class="fa-solid fa-network-wired"></i> DNS resolution</span>
+            <span class="chip chip-xs chip-muted" id="dnsState">cached</span>
+          </div>
+          <div class="kv-list" id="dnsList">
+            <div class="kv"><span>Hostname</span><strong>{{ site.hostname }}</strong></div>
+            <div class="kv"><span>IPv4</span><strong id="dnsIpv4">{{ site.resolved_ip or '—' }}</strong></div>
+            <div class="kv"><span>IPv6</span><strong id="dnsIpv6">—</strong></div>
+            <div class="kv"><span>Lookup</span><strong id="dnsChecked">last check</strong></div>
+          </div>
+        </div>
+
+        <div class="network-block">
+          <div class="network-block-head">
+            <span><i class="fa-solid fa-lock"></i> TLS certificate</span>
+            <span class="chip chip-xs chip-muted" id="sslState">loading</span>
+          </div>
+          <div class="ssl-body" id="sslBody">
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+          </div>
+        </div>
+
+        <p class="small text-muted mb-0">
+          DNS is resolved with <code>socket.getaddrinfo</code>; certificates are read with a raw TLS handshake and verified against the CA bundle.
+        </p>
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="panel mt-3">
+  <div class="panel-header panel-header--wrap">
+    <div>
+      <h2 class="panel-title">Availability timeline</h2>
+      <p class="panel-sub" id="timelineSub">Each bar is one monitoring interval · hover for details</p>
+    </div>
+    <div class="timeline-legend">
+      <span><i class="legend-dot legend-up"></i>Up</span>
+      <span><i class="legend-dot legend-degraded"></i>Degraded</span>
+      <span><i class="legend-dot legend-down"></i>Down</span>
+      <span><i class="legend-dot legend-empty"></i>No data</span>
+    </div>
+  </div>
+  <div class="panel-body">
+    <div class="timeline" id="availabilityTimeline" data-website-id="{{ site.id }}" data-hours="{{ hours }}"></div>
+    <div class="timeline-axis">
+      <span id="timelineStart">—</span>
+      <span class="timeline-summary" id="timelineSummary">Loading…</span>
+      <span id="timelineEnd">now</span>
+    </div>
+  </div>
+</section>
+
+<div class="row g-3 mt-1">
+  <div class="col-xl-7">
+    <section class="panel h-100">
+      <div class="panel-header">
+        <h2 class="panel-title">Recent checks</h2>
+        <span class="panel-sub">Latest 20 probes</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-monitor table-compact align-middle">
+          <thead>
+            <tr>
+              <th scope="col">Time</th>
+              <th scope="col">Status</th>
+              <th scope="col">HTTP</th>
+              <th scope="col">Response</th>
+              <th scope="col">Detail</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for check in checks %}
+              <tr>
+                <td class="cell-time"><time datetime="{{ check.checked_at }}" data-utc="{{ check.checked_at }}">{{ check.checked_at|utc_dt }}</time></td>
+                <td>{{ status_pill(check.status) }}</td>
+                <td>{{ code_badge(check.http_status_code) }}</td>
+                <td>{{ latency(check.response_time_ms, 'unknown' if check.status != 'UP' else 'fast') }}</td>
+                <td class="cell-detail">{{ check.error_message or (check.resolved_ip or '—') }}</td>
+              </tr>
+            {% endfor %}
+            {% if not checks %}
+              <tr><td colspan="5">{{ empty_state('fa-hourglass-half', 'No checks yet', 'The first monitoring cycle will populate this table.') }}</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xl-5">
+    <section class="panel h-100">
+      <div class="panel-header">
+        <h2 class="panel-title">Incident history</h2>
+        <a class="panel-link" href="{{ url_for('incidents_page', website_id=site.id) }}">View all</a>
+      </div>
+      <div class="panel-body pt-0">
+        {% if site.open_incident %}
+          <div class="open-incident">
+            <span class="pulse-dot"></span>
+            <div>
+              <strong>Incident open</strong>
+              <p>{{ site.open_incident.description }}</p>
+              <span>Since <time datetime="{{ site.open_incident.started_at }}" data-utc="{{ site.open_incident.started_at }}">{{ site.open_incident.started_at|utc_dt }}</time></span>
+            </div>
+          </div>
+        {% endif %}
+        {% for incident in incidents %}
+          <div class="incident-item">
+            <span class="incident-icon {{ 'is-open' if incident.incident_status == 'OPEN' else 'is-closed' }}">
+              <i class="fa-solid {{ 'fa-triangle-exclamation' if incident.incident_status == 'OPEN' else 'fa-circle-check' }}"></i>
+            </span>
+            <div class="incident-body">
+              <div class="incident-title">
+                <strong>{{ incident.incident_status|capitalize }}</strong>
+                <span class="chip chip-xs chip-muted">{{ incident.duration_seconds|duration if incident.duration_seconds is not none else 'ongoing' }}</span>
+              </div>
+              <p class="incident-desc">{{ incident.description }}</p>
+              <span class="incident-time">
+                <time datetime="{{ incident.started_at }}" data-utc="{{ incident.started_at }}">{{ incident.started_at|utc_dt }}</time>
+                {% if incident.resolved_at %} → <time datetime="{{ incident.resolved_at }}" data-utc="{{ incident.resolved_at }}">{{ incident.resolved_at|utc_dt }}</time>{% endif %}
+              </span>
+            </div>
+          </div>
+        {% endfor %}
+        {% if not incidents and not site.open_incident %}
+          <div class="empty-inline">
+            <i class="fa-solid fa-shield-heart"></i>
+            <p>No incidents recorded for this website.</p>
+          </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% endblock %}

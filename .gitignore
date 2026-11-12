@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.venv*/
+.python-version
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.xml
+.tox/
+
+# Local databases — never commit monitoring data
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/
+/var/data/
+*.dump
+*.backup
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+config.local.*
+
+# Logs and temporary files
+*.log
+logs/
+nohup.out
+tmp/
+.tmp/
+*.tmp
+*.bak
+*.orig
+*.rej
+
+# Generated artifacts
+dist/
+build/
+*.egg-info/
+*.zip
+artifacts/
+
+# Operating system noise
+.DS_Store
+Thumbs.db
+desktop.ini

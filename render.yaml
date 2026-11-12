@@ -1,0 +1,30 @@
+# Render Blueprint — PulseWatch
+#
+# The persistent disk (and therefore database history) requires a paid instance
+# type; Render's free web services are ephemeral and spin down when idle.
+services:
+  - type: web
+    name: pulsewatch
+    runtime: python
+    plan: starter            # required for a persistent disk
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --workers 1 --threads 4 --bind 0.0.0.0:$PORT app:app
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: DATABASE_PATH
+        value: /var/data/monitor.db
+      - key: SECRET_KEY
+        generateValue: true   # Render generates and stores a strong value
+      - key: ADMIN_TOKEN
+        sync: false           # you supply this in the Render dashboard
+      - key: PULSEWATCH_REQUIRE_PERSISTENT_DB
+        value: "1"
+      - key: WEB_CONCURRENCY
+        value: "1"             # the in-process scheduler needs exactly one worker
+    disk:
+      name: pulsewatch-data
+      mountPath: /var/data
+      sizeGB: 1

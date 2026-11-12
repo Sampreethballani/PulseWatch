@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dashboard{% endblock %} · PulseWatch</title>
+  <meta name="description" content="PulseWatch — real-time website availability, latency, DNS and TLS monitoring.">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='images/logo.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem('pw-theme');
+        document.documentElement.setAttribute('data-bs-theme', saved === 'dark' ? 'dark' : 'light');
+      } catch (error) { /* storage blocked — keep the light default */ }
+    })();
+  </script>
+</head>
+<body data-page="{% block page %}{% endblock %}" data-can-manage="{{ '1' if can_manage else '0' }}" {% block body_attrs %}{% endblock %}>
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img src="{{ url_for('static', filename='images/logo.svg') }}" alt="" class="brand-logo" width="36" height="36">
+      <div class="brand-text">
+        <strong>PulseWatch</strong>
+        <span>Network monitor</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Main navigation">
+      <span class="nav-section-label">Monitoring</span>
+      <a href="{{ url_for('dashboard') }}" class="{{ 'is-active' if active == 'dashboard' }}">
+        <i class="fa-solid fa-gauge-high"></i><span>Dashboard</span>
+      </a>
+      <a href="{{ url_for('websites_page') }}" class="{{ 'is-active' if active == 'websites' }}">
+        <i class="fa-solid fa-globe"></i><span>Websites</span>
+      </a>
+      <a href="{{ url_for('incidents_page') }}" class="{{ 'is-active' if active == 'incidents' }}">
+        <i class="fa-solid fa-triangle-exclamation"></i><span>Incidents</span>
+        {% if open_incident_count %}<span class="nav-badge">{{ open_incident_count }}</span>{% endif %}
+      </a>
+      <a href="{{ url_for('analytics_page') }}" class="{{ 'is-active' if active == 'analytics' }}">
+        <i class="fa-solid fa-chart-line"></i><span>Analytics</span>
+      </a>
+
+      <span class="nav-section-label">Workspace</span>
+      {% if can_manage %}
+      <a href="{{ url_for('settings_page') }}" class="{{ 'is-active' if active == 'settings' }}">
+        <i class="fa-solid fa-sliders"></i><span>Settings</span>
+      </a>
+      {% endif %}
+      <a href="{{ url_for('export_csv') }}">
+        <i class="fa-solid fa-file-csv"></i><span>Export history</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="engine-card">
+        <div class="engine-card-head">
+          <span class="pulse-dot {{ 'is-idle' if monitor_state.running }}"></span>
+          <strong>{{ 'Checking now' if monitor_state.running else 'Monitor engine' }}</strong>
+        </div>
+        <p>Every {{ settings.monitoring_interval }}s · {{ settings.timeout_seconds }}s timeout</p>
+        <span class="engine-state" data-engine-state>
+          {{ 'Cycle in progress' if monitor_state.running else 'Auto-checks scheduled' }}
+        </span>
+      </div>
+      <p class="sidebar-note"><i class="fa-solid fa-shield-halved"></i> SSRF-protected network probes</p>
+      {% if can_manage %}
+        <form class="admin-state" method="post" action="{{ url_for('admin_logout') }}">
+          <span><i class="fa-solid fa-user-shield"></i> Administrator</span>
+          <button type="submit" class="btn-link-plain">Sign out</button>
+        </form>
+      {% elif admin_configured %}
+        <a class="admin-state" href="{{ url_for('admin_login', next=request.full_path) }}">
+          <span><i class="fa-solid fa-user-lock"></i> Read-only view</span>
+          <span class="admin-state-action">Sign in</span>
+        </a>
+      {% else %}
+        <div class="admin-state">
+          <span><i class="fa-solid fa-user-lock"></i> Local management only</span>
+        </div>
+      {% endif %}
+    </div>
+  </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="btn-icon topbar-burger" id="sidebarToggle" type="button" aria-label="Toggle navigation" aria-expanded="false">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+      <div class="breadcrumbs">
+        <span>Workspace</span>
+        <i class="fa-solid fa-chevron-right"></i>
+        <strong>{% block breadcrumb %}Dashboard{% endblock %}</strong>
+      </div>
+      <div class="topbar-actions">
+        <span class="live-chip" title="Background monitoring is independent of this page">
+          <span class="pulse-dot"></span> Live
+        </span>
+        {% if can_manage %}
+        <form method="post" action="{{ url_for('check_now') }}" class="d-inline">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <button class="btn btn-sm btn-outline-secondary topbar-check" type="submit" data-check-all>
+            <i class="fa-solid fa-rotate"></i><span>Check now</span>
+          </button>
+        </form>
+        {% elif admin_configured %}
+        <a class="btn btn-sm btn-outline-secondary topbar-check" href="{{ url_for('admin_login', next=request.full_path) }}">
+          <i class="fa-solid fa-user-lock"></i><span>Sign in</span>
+        </a>
+        {% endif %}
+        <button class="btn-icon" type="button" data-theme-toggle aria-label="Switch colour theme" title="Switch light / dark mode">
+          <i class="fa-solid fa-moon" data-theme-icon></i>
+        </button>
+        <span class="avatar" title="Local workspace">PW</span>
+      </div>
+    </header>
+
+    <main class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="flash-stack">
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" data-autodismiss>
+                <i class="fa-solid {{ 'fa-circle-check' if category == 'success' else ('fa-triangle-exclamation' if category in ['danger', 'warning'] else 'fa-circle-info') }} me-2"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="app-footer">
+      <span>PulseWatch · Flask · SQLite · real HTTP probes</span>
+      <span class="app-footer-meta">Times shown in your local timezone</span>
+    </footer>
+  </div>
+</div>
+
+{% if can_manage %}
+{% include "_website_modal.html" %}
+{% endif %}
+
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmTitle" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-body">
+        <div class="confirm-icon"><i class="fa-solid fa-trash-can"></i></div>
+        <h2 class="confirm-title" id="confirmTitle">Delete website?</h2>
+        <p class="confirm-text" id="confirmText">This removes the website and all of its monitoring history.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmAccept">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastHost" aria-live="polite" aria-atomic="true"></div>
+
+<script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

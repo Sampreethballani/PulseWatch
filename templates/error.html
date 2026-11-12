@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}{{ code }}{% endblock %}
+{% block page %}error{% endblock %}
+{% block breadcrumb %}Error{% endblock %}
+
+{% block content %}
+<section class="panel error-panel">
+  <div class="error-code">{{ code }}</div>
+  <h1>{{ message }}</h1>
+  <p class="page-sub">The page you requested could not be displayed. Your monitoring data is unaffected.</p>
+  <div class="empty-actions mt-3">
+    {% if code == 403 and admin_configured %}
+      <a class="btn btn-primary" href="{{ url_for('admin_login', next=request.path) }}">
+        <i class="fa-solid fa-user-lock"></i> Administrator sign-in
+      </a>
+    {% endif %}
+    <a class="btn {{ 'btn-outline-secondary' if code == 403 and admin_configured else 'btn-primary' }}" href="{{ url_for('dashboard') }}"><i class="fa-solid fa-gauge-high"></i> Back to dashboard</a>
+    <a class="btn btn-outline-secondary" href="{{ url_for('websites_page') }}">View websites</a>
+  </div>
+</section>
+{% endblock %}

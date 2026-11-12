@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from "_macros.html" import empty_state %}
+
+{% block title %}Incidents{% endblock %}
+{% block page %}incidents{% endblock %}
+{% block breadcrumb %}Incidents{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Incident history</h1>
+    <p class="page-sub">Automatic incidents are opened when a website leaves the UP state and closed when it recovers.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline-secondary" href="{{ url_for('export_csv', hours=720) }}">
+      <i class="fa-solid fa-file-csv"></i> Export monitoring CSV
+    </a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="mini-stat mini-stat--wide">
+      <span class="mini-label">Open incidents</span>
+      <span class="mini-value text-danger">{{ summary.open }}</span>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="mini-stat mini-stat--wide">
+      <span class="mini-label">Resolved incidents</span>
+      <span class="mini-value">{{ summary.resolved }}</span>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="mini-stat mini-stat--wide">
+      <span class="mini-label">Average resolution time</span>
+      <span class="mini-value">{{ summary.avg_duration_seconds|duration if summary.avg_duration_seconds is not none else '—' }}</span>
+    </div>
+  </div>
+</div>
+
+<section class="panel mt-3">
+  <div class="panel-header panel-header--wrap">
+    <form class="filter-row" method="get" action="{{ url_for('incidents_page') }}">
+      <select class="form-select form-select-sm" name="website_id" aria-label="Filter by website">
+        <option value="">All websites</option>
+        {% for site in sites %}
+          <option value="{{ site.id }}" {{ 'selected' if filters.website_id == site.id }}>{{ site.name }}</option>
+        {% endfor %}
+      </select>
+      <select class="form-select form-select-sm" name="status" aria-label="Filter by incident status">
+        <option value="">Any status</option>
+        <option value="OPEN" {{ 'selected' if filters.status == 'OPEN' }}>Open</option>
+        <option value="RESOLVED" {{ 'selected' if filters.status == 'RESOLVED' }}>Resolved</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="fa-solid fa-filter"></i> Apply</button>
+      {% if filters.website_id or filters.status %}
+        <a class="btn btn-sm btn-link" href="{{ url_for('incidents_page') }}">Reset</a>
+      {% endif %}
+    </form>
+    <span class="panel-sub">{{ incidents|length }} record{{ '' if incidents|length == 1 else 's' }}</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-monitor align-middle">
+      <thead>
+        <tr>
+          <th scope="col">Website</th>
+          <th scope="col">State</th>
+          <th scope="col">Started</th>
+          <th scope="col" class="d-none d-md-table-cell">Resolved</th>
+          <th scope="col">Duration</th>
+          <th scope="col" class="d-none d-lg-table-cell">Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for incident in incidents %}
+          <tr data-status="{{ incident.incident_status }}">
+            <td>
+              <a class="site-name" href="{{ url_for('website_details', website_id=incident.website_id) }}">{{ incident.website_name }}</a>
+              <span class="site-url">{{ incident.website_url }}</span>
+            </td>
+            <td>
+              <span class="chip chip-xs {{ 'chip-danger' if incident.incident_status == 'OPEN' else 'chip-success' }}">
+                {{ incident.incident_status }}
+              </span>
+            </td>
+            <td class="cell-time"><time datetime="{{ incident.started_at }}" data-utc="{{ incident.started_at }}">{{ incident.started_at|utc_dt }}</time></td>
+            <td class="cell-time d-none d-md-table-cell">
+              {% if incident.resolved_at %}
+                <time datetime="{{ incident.resolved_at }}" data-utc="{{ incident.resolved_at }}">{{ incident.resolved_at|utc_dt }}</time>
+              {% else %}—{% endif %}
+            </td>
+            <td>{{ incident.duration_seconds|duration if incident.duration_seconds is not none else 'Ongoing' }}</td>
+            <td class="cell-detail d-none d-lg-table-cell">{{ incident.description or '—' }}</td>
+          </tr>
+        {% endfor %}
+        {% if not incidents %}
+          <tr>
+            <td colspan="6">
+              {{ empty_state('fa-shield-heart', 'No incidents found', 'When a website goes down or degrades, an incident appears here and closes automatically after recovery.') }}
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

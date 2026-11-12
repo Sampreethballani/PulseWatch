@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% from "_macros.html" import uptime_value, empty_state %}
+
+{% block title %}Analytics{% endblock %}
+{% block page %}analytics{% endblock %}
+{% block breadcrumb %}Analytics{% endblock %}
+{% block body_attrs %}data-hours="{{ hours }}"{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Analytics</h1>
+    <p class="page-sub">Latency trends and uptime comparison built from real stored monitoring results.</p>
+  </div>
+  <div class="page-actions">
+    <div class="segmented">
+      {% for value, label in [(24, '24 hours'), (168, '7 days'), (720, '30 days')] %}
+        <a class="{{ 'is-active' if hours == value }}" href="{{ url_for('analytics_page', hours=value) }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('export_csv', hours=hours) }}">
+      <i class="fa-solid fa-file-csv"></i> Export CSV
+    </a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-3 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-indigo"><i class="fa-solid fa-database"></i></span>
+        <span class="stat-label">Checks</span>
+      </div>
+      <div class="stat-value">{{ summary.checks }}</div>
+      <div class="stat-hint">In selected period</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-green"><i class="fa-solid fa-arrow-trend-up"></i></span>
+        <span class="stat-label">Uptime</span>
+      </div>
+      <div class="stat-value">
+        {% if summary.uptime_pct is not none %}{{ '%.2f'|format(summary.uptime_pct) }}<small>%</small>{% else %}<span class="text-muted">N/A</span>{% endif %}
+      </div>
+      <div class="stat-hint">UP checks / all checks</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-sky"><i class="fa-solid fa-stopwatch"></i></span>
+        <span class="stat-label">Avg response</span>
+      </div>
+      <div class="stat-value">
+        {% if summary.avg_response_ms is not none %}{{ summary.avg_response_ms|round(0)|int }}<small>ms</small>{% else %}—{% endif %}
+      </div>
+      <div class="stat-hint">Successful checks only</div>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="stat-card">
+      <div class="stat-card-top">
+        <span class="stat-icon tint-amber"><i class="fa-solid fa-triangle-exclamation"></i></span>
+        <span class="stat-label">Incidents</span>
+      </div>
+      <div class="stat-value">{{ summary.incidents }}</div>
+      <div class="stat-hint">Started in period</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-xl-8">
+    <section class="panel h-100">
+      <div class="panel-header panel-header--wrap">
+        <div>
+          <h2 class="panel-title">Response time history</h2>
+          <p class="panel-sub">Only successful probes are plotted; failed checks appear as gaps.</p>
+        </div>
+        <select class="form-select form-select-sm" id="historySite" aria-label="Select website"></select>
+      </div>
+      <div class="panel-body">
+        <div class="chart-box chart-box--tall">
+          <canvas id="historyChart" aria-label="Response time history" role="img"></canvas>
+          <div class="chart-empty" id="historyChartEmpty" hidden>
+            <i class="fa-solid fa-chart-line"></i>
+            <p>No response time data in this period.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xl-4">
+    <section class="panel h-100">
+      <div class="panel-header">
+        <h2 class="panel-title">Uptime by website</h2>
+        <span class="panel-sub">Selected period</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-box chart-box--tall">
+          <canvas id="uptimeChart" aria-label="Uptime percentages by website" role="img"></canvas>
+          <div class="chart-empty" id="uptimeChartEmpty" hidden>
+            <i class="fa-solid fa-chart-simple"></i>
+            <p>No uptime data yet.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-xl-7">
+    <section class="panel h-100">
+      <div class="panel-header">
+        <h2 class="panel-title">Response time comparison</h2>
+        <span class="panel-sub">Average of successful checks</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-box">
+          <canvas id="comparisonChart" aria-label="Average response time by website" role="img"></canvas>
+          <div class="chart-empty" id="comparisonChartEmpty" hidden>
+            <i class="fa-solid fa-chart-column"></i>
+            <p>No completed checks in this period.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-xl-5">
+    <section class="panel h-100">
+      <div class="panel-header">
+        <h2 class="panel-title">Website performance</h2>
+        <span class="panel-sub">Uptime rule: UP counts as successful</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-monitor table-compact align-middle">
+          <thead>
+            <tr>
+              <th scope="col">Website</th>
+              <th scope="col">Uptime</th>
+              <th scope="col">Avg</th>
+              <th scope="col">Checks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for site in comparison.sites %}
+              <tr>
+                <td><a class="site-name" href="{{ url_for('website_details', website_id=site.id, hours=hours) }}">{{ site.name }}</a></td>
+                <td>{{ uptime_value(site.uptime_pct) }}</td>
+                <td>{% if site.avg_response_ms is not none %}{{ site.avg_response_ms|round(0)|int }} ms{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ site.total_checks }}</td>
+              </tr>
+            {% endfor %}
+            {% if not comparison.sites %}
+              <tr><td colspan="4">{{ empty_state('fa-globe', 'Nothing to analyse yet', 'Add websites and let a monitoring cycle run.') }}</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% endblock %}
