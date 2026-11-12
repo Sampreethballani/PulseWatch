@@ -108,6 +108,8 @@ class Config:
     # Binds all interfaces by default; PORT is provided by Render.
     HOST = _env_str("PULSEWATCH_HOST", "MONITOR_HOST", "HOST", default="0.0.0.0")
     PORT = _env_int("PORT", _env_int("MONITOR_PORT", 5000))
+    if not 0 < PORT < 65536:  # ignore PORT=0 / garbage from the environment
+        PORT = 5000
     # Backwards-compatible aliases used by the development entry point.
     FLASK_HOST = HOST
     FLASK_PORT = PORT
