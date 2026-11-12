@@ -434,7 +434,9 @@ that process. `GET /healthz` returns `200` with database and scheduler state, or
 
 Production startup fails fast (with a clear log line, no stack trace in the
 browser) when `SECRET_KEY` is still the development default or `DATABASE_PATH` was
-not set explicitly. It never silently falls back to an ephemeral database.
+not set explicitly. It never silently falls back to an ephemeral database: on
+the free tier the writable app directory is chosen explicitly, with its
+limitations documented below.
 
 ---
 
